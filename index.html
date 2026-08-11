@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Soni-trak-a</title>
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Soni-trak-a" />
+<meta name="theme-color" content="#f6faff" />
+<link rel="icon" href="app-logo.jpeg" />
+<link rel="apple-touch-icon" href="app-logo.jpeg" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<style>
+  html, body { margin: 0; overscroll-behavior-y: contain; }
+</style>
+</head>
+<body>
+<div id="root">
+  <div style="font-family: -apple-system, sans-serif; padding: 24px; color: #0369a1;">Loading…</div>
+</div>
+
+<script>
+  window.addEventListener('error', function (e) {
+    document.getElementById('root').innerHTML =
+      '<div style="font-family:-apple-system,sans-serif;padding:24px;color:#b91c1c;white-space:pre-wrap;">' +
+      '⚠️ Script error:\n' + (e.message || e) +
+      (e.filename ? ('\n\nFile: ' + e.filename + ':' + e.lineno) : '') +
+      '</div>';
+  });
+
+  setTimeout(function () {
+    var root = document.getElementById('root');
+    if (root && root.innerText.indexOf('Loading') === 0) {
+      var missing = [];
+      if (typeof React === 'undefined') missing.push('React (unpkg.com/react)');
+      if (typeof ReactDOM === 'undefined') missing.push('ReactDOM (unpkg.com/react-dom)');
+      root.innerHTML =
+        '<div style="font-family:-apple-system,sans-serif;padding:24px;color:#b91c1c;white-space:pre-wrap;">' +
+        (missing.length
+          ? '⚠️ These scripts never loaded, likely blocked or no internet connection:\n\n' + missing.join('\n')
+          : '⚠️ Scripts loaded but the app never rendered. Open the browser console for details.') +
+        '</div>';
+    }
+  }, 4000);
+</script>
+
+<script>
+const { useState, useEffect } = React;
+const h = React.createElement;
+
+const STORAGE_KEY = 'sonitraka-state';
+const YOGA_URL = 'https://www.youtube.com/@yogawithadriene';
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+const defaultGoals = { water: 8, fruit: 5, steps: 10000, workout: 1 };
+const zeroProgress = { water: 0, fruit: 0, steps: 0, workout: 0 };
+const HISTORY_KEY = 'sonitraka-history';
+const HISTORY_DAYS = 7;
+
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+function saveHistoryEntry(date, goals, progress) {
+  try {
+    const hist = loadHistory();
+    const count = Object.keys(zeroProgress).filter((k) => progress[k] >= goals[k]).length;
+    hist[date] = count;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 30);
+    Object.keys(hist).forEach((d) => { if (new Date(d) < cutoff) delete hist[d]; });
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(hist));
+  } catch (e) {}
+}
+function dayColorClass(count) {
+  if (count >= 4) return 'bg-green-600';
+  if (count === 3) return 'bg-yellow-400';
+  if (count === 2) return 'bg-orange-500';
+  if (count === 1) return 'bg-red-500';
+  return 'bg-red-900';
+}
+function last7Days() {
+  const hist = loadHistory();
+  const days = [];
+  for (let i = HISTORY_DAYS - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    const count = hist[key] || 0;
+    days.push({ label: 'SMTWTFS'[d.getDay()], count, isToday: i === 0 });
+  }
+  return days;
+}
+
+// --- tiny inline icon set ---
+function svg(props, ...children) {
+  return h('svg', Object.assign({ viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, props), ...children);
+}
+const Icon = {
+  Plus: (p) => svg({ width: p.size||18, height: p.size||18, strokeWidth: 2.5 }, h('line',{x1:12,y1:5,x2:12,y2:19}), h('line',{x1:5,y1:12,x2:19,y2:12})),
+  Minus: (p) => svg({ width: p.size||18, height: p.size||18, strokeWidth: 2.5 }, h('line',{x1:5,y1:12,x2:19,y2:12})),
+  Calendar: (p) => svg({ width: p.size||24, height: p.size||24, className: p.className }, h('rect',{x:3,y:4,width:18,height:18,rx:2}), h('line',{x1:16,y1:2,x2:16,y2:6}), h('line',{x1:8,y1:2,x2:8,y2:6}), h('line',{x1:3,y1:10,x2:21,y2:10})),
+  Play: (p) => h('svg',{viewBox:'0 0 24 24',width:p.size||24,height:p.size||24,fill:'currentColor'}, h('polygon',{points:'6 3 20 12 6 21 6 3'})),
+  Home: (p) => svg({ width: p.size||24, height: p.size||24, strokeWidth: p.strokeWidth||2 }, h('path',{d:'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'}), h('polyline',{points:'9 22 9 12 15 12 15 22'})),
+  Settings: (p) => svg({ width: p.size||24, height: p.size||24, strokeWidth: p.strokeWidth||2 }, h('circle',{cx:12,cy:12,r:3}), h('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})),
+  Droplets: (p) => svg({ width: p.size||18, height: p.size||18 }, h('path',{d:'M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z'}), h('path',{d:'M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97'})),
+  Apple: (p) => svg({ width: p.size||18, height: p.size||18 }, h('path',{d:'M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06z'}), h('path',{d:'M10 2c1 .5 2 2 2 5'})),
+  Footprints: (p) => svg({ width: p.size||18, height: p.size||18 }, h('path',{d:'M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z'}), h('path',{d:'M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z'})),
+  Dumbbell: (p) => svg({ width: p.size||18, height: p.size||18 }, h('path',{d:'m6.5 6.5 11 11'}), h('path',{d:'m21 21-1-1'}), h('path',{d:'m3 3 1 1'}), h('path',{d:'m18 22 4-4'}), h('path',{d:'m2 6 4-4'}), h('path',{d:'m3 10 7-7'}), h('path',{d:'m14 21 7-7'})),
+};
+
+function ProgressRing({ percentage, color, fillColor, label, target, current, size = 64, strokeWidth = 4 }) {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const clamped = Math.min(100, Math.max(0, percentage));
+  const offset = circumference - (clamped / 100) * circumference;
+  const complete = clamped >= 100;
+
+  return h('div', { className: 'flex flex-col items-center' },
+    h('div', { className: 'relative', style: { width: size, height: size } },
+      complete
+        ? h('svg', { className: 'w-full h-full' },
+            h('circle', { cx: size/2, cy: size/2, r: size/2, fill: 'currentColor', className: `${fillColor} transition-colors duration-300` }))
+        : h('svg', { className: 'transform -rotate-90 w-full h-full' },
+            h('circle', { cx: size/2, cy: size/2, r: radius, stroke: 'currentColor', strokeWidth, fill: 'transparent', className: 'text-gray-200' }),
+            h('circle', { cx: size/2, cy: size/2, r: radius, stroke: 'currentColor', strokeWidth, fill: 'transparent',
+              strokeDasharray: circumference, style: { strokeDashoffset: offset, transition: 'stroke-dashoffset 0.5s ease' }, className: color })),
+      h('div', { className: `absolute inset-0 flex items-center justify-center text-[10px] font-bold text-center px-1 ${complete ? 'text-white' : ''}` }, `${current}/${target}`)
+    ),
+    h('span', { className: 'text-xs text-gray-500 mt-1 uppercase tracking-wider font-semibold' }, label)
+  );
+}
+
+function TopBar({ title }) {
+  return h('div', { className: 'flex items-center justify-between px-6 py-4 bg-white/80 backdrop-blur-md sticky top-0 z-10' },
+    h(Icon.Calendar, { size: 24, className: 'text-sky-700' }),
+    h('h1', { className: 'text-2xl font-bold text-sky-900 tracking-tight' }, title),
+    h('div', { className: 'w-6 h-6' })
+  );
+}
+
+// --- background artwork for each habit card ---
+const CardArt = {
+  water: () => h('svg', { viewBox: '0 0 200 200', preserveAspectRatio: 'xMidYMid slice', className: 'absolute inset-0 w-full h-full' },
+    h('defs', null,
+      h('linearGradient', { id: 'waterGrad', x1: '0', y1: '0', x2: '1', y2: '1' },
+        h('stop', { offset: '0%', stopColor: '#bae6fd' }),
+        h('stop', { offset: '100%', stopColor: '#0284c7' }))
+    ),
+    h('rect', { width: 200, height: 200, fill: '#e0f2fe' }),
+    h('path', { d: 'M100 55c35 46 62 82 62 118a62 62 0 1 1-124 0c0-36 27-72 62-118z', fill: 'url(#waterGrad)' }),
+    h('ellipse', { cx: 82, cy: 140, rx: 14, ry: 20, fill: 'white', opacity: 0.35 })
+  ),
+  fruit: () => h('svg', { viewBox: '0 0 200 200', preserveAspectRatio: 'xMidYMid slice', className: 'absolute inset-0 w-full h-full' },
+    h('defs', null,
+      h('linearGradient', { id: 'fruitGrad', x1: '0', y1: '0', x2: '1', y2: '1' },
+        h('stop', { offset: '0%', stopColor: '#fecaca' }),
+        h('stop', { offset: '100%', stopColor: '#dc2626' }))
+    ),
+    h('rect', { width: 200, height: 200, fill: '#fef2f2' }),
+    h('path', { d: 'M100 80c-8-16-28-24-46-18 6 20 24 34 46 30z', fill: '#16a34a' }),
+    h('path', { d: 'M100 84c34 0 58 28 58 62a58 58 0 1 1-116 0c0-34 24-62 58-62z', fill: 'url(#fruitGrad)' }),
+    h('ellipse', { cx: 78, cy: 118, rx: 12, ry: 18, fill: 'white', opacity: 0.3 })
+  ),
+  steps: () => h('svg', { viewBox: '0 0 200 200', preserveAspectRatio: 'xMidYMid slice', className: 'absolute inset-0 w-full h-full' },
+    h('defs', null,
+      h('linearGradient', { id: 'stepGrad', x1: '0', y1: '0', x2: '1', y2: '1' },
+        h('stop', { offset: '0%', stopColor: '#bbf7d0' }),
+        h('stop', { offset: '100%', stopColor: '#15803d' }))
+    ),
+    h('rect', { width: 200, height: 200, fill: '#f0fdf4' }),
+    h('path', { d: 'M20 150 Q70 100 60 60 Q100 100 90 40 Q140 90 130 30', stroke: 'url(#stepGrad)', strokeWidth: 14, fill: 'none', strokeLinecap: 'round', opacity: 0.8 }),
+    h('path', { d: 'M40 170 Q90 120 80 80 Q120 120 110 60 Q160 110 150 50', stroke: 'url(#stepGrad)', strokeWidth: 10, fill: 'none', strokeLinecap: 'round', opacity: 0.5 })
+  ),
+  workout: () => h('svg', { viewBox: '0 0 200 200', preserveAspectRatio: 'xMidYMid slice', className: 'absolute inset-0 w-full h-full' },
+    h('defs', null,
+      h('linearGradient', { id: 'workoutGrad', x1: '0', y1: '0', x2: '1', y2: '1' },
+        h('stop', { offset: '0%', stopColor: '#d1d5db' }),
+        h('stop', { offset: '100%', stopColor: '#4b5563' }))
+    ),
+    h('rect', { width: 200, height: 200, fill: '#f3f4f6' }),
+    h('g', { transform: 'rotate(-35 100 100)' },
+      h('rect', { x: 40, y: 88, width: 120, height: 24, rx: 6, fill: 'url(#workoutGrad)' }),
+      h('rect', { x: 24, y: 76, width: 24, height: 48, rx: 8, fill: '#374151' }),
+      h('rect', { x: 152, y: 76, width: 24, height: 48, rx: 8, fill: '#374151' })
+    )
+  ),
+};
+
+function HabitCard({ title, IconComp, iconColor, iconBg, btnColor, btnIconColor, value, target, onIncrement, onDecrement, incrementValue = 1, hit, art }) {
+  return h('div', { className: `relative overflow-hidden rounded-3xl bg-white shadow-sm aspect-square flex flex-col p-4 transition-colors ${hit ? 'ring-2 ring-green-400' : ''}` },
+    art && h(art, null),
+    h('div', { className: 'relative z-10 flex items-center justify-between' },
+      h('div', { className: `w-9 h-9 rounded-full ${iconBg} flex items-center justify-center ${iconColor}` }, h(IconComp, { size: 18 })),
+      h('span', { className: 'text-[10px] font-bold text-gray-500 bg-white/70 rounded-full px-2 py-0.5 uppercase tracking-wider' }, `/ ${target}`)
+    ),
+    h('div', { className: 'relative z-10 flex-1 flex flex-col items-center justify-center' },
+      h('span', { className: 'text-3xl font-extrabold text-gray-900' }, value),
+      h('h3', { className: 'text-xs font-bold text-gray-700 uppercase tracking-wide mt-1' }, title)
+    ),
+    h('div', { className: 'relative z-10 flex items-center justify-between gap-2' },
+      h('button', { onClick: onDecrement, 'aria-label': `Decrease ${title}`, className: 'flex-1 py-2 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500 active:scale-95 transition-transform' }, h(Icon.Minus, { size: 18 })),
+      h('button', { onClick: onIncrement, 'aria-label': `Increase ${title}`, className: `flex-1 py-2 rounded-xl ${btnColor} ${btnIconColor} flex items-center justify-center font-bold active:scale-95 transition-transform` },
+        incrementValue > 1 ? `+${incrementValue}` : h(Icon.Plus, { size: 18 }))
+    )
+  );
+}
+
+const habitConfig = [
+  { key: 'water', title: 'Water', IconComp: Icon.Droplets, iconColor: 'text-sky-600', iconBg: 'bg-sky-50', btnColor: 'bg-sky-100', btnIconColor: 'text-sky-700', ring: 'text-sky-500', fill: 'bg-sky-500', art: CardArt.water },
+  { key: 'fruit', title: 'Fruit', IconComp: Icon.Apple, iconColor: 'text-orange-600', iconBg: 'bg-orange-50', btnColor: 'bg-orange-100', btnIconColor: 'text-orange-700', ring: 'text-orange-500', fill: 'bg-orange-500', art: CardArt.fruit },
+  { key: 'steps', title: 'Steps', IconComp: Icon.Footprints, iconColor: 'text-green-700', iconBg: 'bg-green-50', btnColor: 'bg-green-100', btnIconColor: 'text-green-800', ring: 'text-green-700', fill: 'bg-green-600', incrementValue: 500, art: CardArt.steps },
+  { key: 'workout', title: 'Workout', IconComp: Icon.Dumbbell, iconColor: 'text-gray-700', iconBg: 'bg-gray-100', btnColor: 'bg-gray-200', btnIconColor: 'text-gray-800', ring: 'text-gray-800', fill: 'bg-gray-800', art: CardArt.workout },
+];
+
+const settingsConfig = [
+  { key: 'water', label: 'Water', unit: 'Glasses', IconComp: Icon.Droplets, color: 'text-sky-500', bgColor: 'bg-sky-50' },
+  { key: 'fruit', label: 'Fruit', unit: 'Portions', IconComp: Icon.Apple, color: 'text-orange-500', bgColor: 'bg-orange-50' },
+  { key: 'steps', label: 'Steps', unit: 'Count', IconComp: Icon.Footprints, color: 'text-green-500', bgColor: 'bg-green-50' },
+  { key: 'workout', label: 'Workouts', unit: 'Sessions', IconComp: Icon.Dumbbell, color: 'text-red-500', bgColor: 'bg-red-50' },
+];
+
+function App() {
+  const [activeTab, setActiveTab] = useState('home');
+  const [goals, setGoals] = useState(defaultGoals);
+  const [progress, setProgress] = useState(zeroProgress);
+  const [draftGoals, setDraftGoals] = useState(defaultGoals);
+  const [saved, setSaved] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    const stored = loadState();
+    if (stored) {
+      setGoals(stored.goals || defaultGoals);
+      setDraftGoals(stored.goals || defaultGoals);
+      if (stored.date === todayStr()) setProgress(stored.progress || zeroProgress);
+    }
+    setLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ date: todayStr(), goals, progress }));
+      saveHistoryEntry(todayStr(), goals, progress);
+    } catch (e) {}
+  }, [goals, progress, loaded]);
+
+  const handleUpdateProgress = (habit, delta) => setProgress((prev) => ({ ...prev, [habit]: Math.max(0, prev[habit] + delta) }));
+  const handleDraftChange = (habit, value) => {
+    const num = Number(value);
+    setDraftGoals((prev) => ({ ...prev, [habit]: Number.isNaN(num) ? 0 : num }));
+    setSaved(false);
+  };
+  const handleSaveGoals = () => {
+    setGoals(draftGoals);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1800);
+  };
+  const openYoga = () => window.open(YOGA_URL, '_blank', 'noopener,noreferrer');
+
+  const homeView = h('div', { className: 'px-6 space-y-6 pt-2' },
+    h(TopBar, { title: 'Soni-trak-a' }),
+    h('div', { className: 'bg-white rounded-[32px] p-6 shadow-sm' },
+      h('h2', { className: 'text-lg font-bold mb-4' }, 'Daily Overview'),
+      h('div', { className: 'grid grid-cols-4 gap-4' },
+        habitConfig.map((hc) => h(ProgressRing, {
+          key: hc.key,
+          label: hc.title,
+          current: hc.key === 'steps' ? `${(progress[hc.key]/1000).toFixed(1)}k` : progress[hc.key],
+          target: hc.key === 'steps' ? `${(goals[hc.key]/1000).toFixed(0)}k` : goals[hc.key],
+          percentage: (progress[hc.key] / goals[hc.key]) * 100,
+          color: hc.ring,
+          fillColor: hc.fill,
+        }))
+      )
+    ),
+    h('div', { className: 'grid grid-cols-2 gap-4' },
+      habitConfig.map((hc) => h(HabitCard, {
+        key: hc.key,
+        title: hc.title,
+        IconComp: hc.IconComp,
+        iconColor: hc.iconColor,
+        iconBg: hc.iconBg,
+        btnColor: hc.btnColor,
+        btnIconColor: hc.btnIconColor,
+        value: progress[hc.key],
+        target: goals[hc.key],
+        incrementValue: hc.incrementValue || 1,
+        hit: progress[hc.key] >= goals[hc.key],
+        art: hc.art,
+        onIncrement: () => handleUpdateProgress(hc.key, hc.incrementValue || 1),
+        onDecrement: () => handleUpdateProgress(hc.key, -(hc.incrementValue || 1)),
+      }))
+    ),
+    h('button', { onClick: openYoga, className: 'w-full bg-white rounded-[32px] p-6 shadow-sm flex flex-col items-center justify-center space-y-2 active:scale-95 transition-transform' },
+      h('div', { className: 'w-16 h-16 bg-sky-100 rounded-full flex items-center justify-center text-sky-600' }, h(Icon.Play, { size: 32 })),
+      h('h3', { className: 'text-xl font-bold' }, "Today's Yoga"),
+      h('p', { className: 'text-sm text-gray-500' }, 'Yoga With Adriene — opens YouTube')
+    ),
+    h('div', { className: 'bg-white rounded-[32px] p-6 shadow-sm' },
+      h('h2', { className: 'text-lg font-bold mb-4' }, 'Last 7 Days'),
+      h('div', { className: 'flex items-end justify-between h-24 px-2' },
+        last7Days().map((day, i) => h('div', { key: i, className: 'flex flex-col items-center space-y-2' },
+          h('div', {
+            className: `w-8 rounded-full relative ${dayColorClass(day.count)}`,
+            style: { height: `${16 + day.count * 12}px` }
+          },
+            day.isToday && h('div', { className: 'absolute -top-2 -right-1 w-2 h-2 bg-sky-500 rounded-full border border-white' })
+          ),
+          h('span', { className: `text-[10px] font-bold ${day.isToday ? 'text-sky-600' : 'text-gray-400'}` }, day.label)
+        ))
+      ),
+      h('p', { className: 'text-xs text-gray-400 mt-3' }, 'Green = all 4 · Yellow = 3 · Orange = 2 · Red = 1 · Dark red = 0')
+    )
+  );
+
+  const settingsView = h('div', { className: 'px-6 pt-2 space-y-6' },
+    h('div', { className: 'flex items-center justify-between px-0 py-4 sticky top-0 z-10' },
+      h(Icon.Calendar, { size: 24, className: 'text-sky-700' }),
+      h('h1', { className: 'text-2xl font-bold text-sky-900 tracking-tight' }, 'Soni-trak-a'),
+      h('span', { className: 'text-sky-700 font-bold text-lg' }, 'Settings')
+    ),
+    h('div', { className: 'bg-white rounded-[32px] p-6 shadow-sm space-y-2' },
+      h('h2', { className: 'text-xl font-bold' }, 'Your Goals'),
+      h('p', { className: 'text-sm text-gray-500 leading-relaxed' }, 'Adjust your daily targets below, then save.')
+    ),
+    h('div', { className: 'space-y-4' },
+      settingsConfig.map((item) => h('div', { key: item.key, className: 'bg-white rounded-[24px] p-5 flex items-center justify-between shadow-sm' },
+        h('div', { className: 'flex items-center space-x-4' },
+          h('div', { className: `w-12 h-12 rounded-full ${item.bgColor} flex items-center justify-center ${item.color}` }, h(item.IconComp, { size: 24 })),
+          h('div', null,
+            h('h4', { className: 'font-bold text-gray-800' }, item.label),
+            h('p', { className: 'text-xs text-gray-400 uppercase tracking-wider' }, item.unit)
+          )
+        ),
+        h('input', {
+          type: 'number', min: 0, value: draftGoals[item.key],
+          onChange: (e) => handleDraftChange(item.key, e.target.value),
+          className: 'w-20 text-right text-xl font-bold text-sky-900 bg-transparent border-b-2 border-sky-100 focus:border-sky-400 outline-none'
+        })
+      ))
+    ),
+    h('button', {
+      onClick: handleSaveGoals,
+      className: `w-full py-5 rounded-[24px] text-white font-bold text-lg shadow-lg active:scale-[0.98] transition-transform ${saved ? 'bg-green-500' : 'bg-sky-500'}`
+    }, saved ? 'Saved ✓' : 'Save Changes')
+  );
+
+  const nav = h('div', { className: 'fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-gray-100 flex justify-around items-center px-10 pb-8 pt-4 z-50 max-w-md mx-auto' },
+    h('button', { onClick: () => setActiveTab('home'), className: `flex flex-col items-center space-y-1 transition-colors ${activeTab === 'home' ? 'text-sky-600' : 'text-gray-400'}` },
+      h(Icon.Home, { size: 24, strokeWidth: activeTab === 'home' ? 2.5 : 2 }),
+      h('span', { className: 'text-[10px] font-bold uppercase tracking-widest' }, 'Home')
+    ),
+    h('button', { onClick: () => { setDraftGoals(goals); setActiveTab('settings'); }, className: `flex flex-col items-center space-y-1 transition-colors ${activeTab === 'settings' ? 'text-sky-600' : 'text-gray-400'}` },
+      h(Icon.Settings, { size: 24, strokeWidth: activeTab === 'settings' ? 2.5 : 2 }),
+      h('span', { className: 'text-[10px] font-bold uppercase tracking-widest' }, 'Settings')
+    )
+  );
+
+  return h('div', { className: 'max-w-md mx-auto min-h-screen bg-[#f6faff] flex flex-col font-sans text-gray-900 border-x border-gray-200' },
+    h('div', { className: 'flex-1 overflow-y-auto pb-24' }, activeTab === 'home' ? homeView : settingsView),
+    nav
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(h(App));
+</script>
+</body>
+</html>
